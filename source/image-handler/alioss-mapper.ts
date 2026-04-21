@@ -59,6 +59,7 @@ export class AliOssMapper {
         // 未来可扩展其他操作：format, watermark 等
       }
 
+      this.applyDefaults(edits);
       return edits;
     } catch (error) {
       console.error("阿里云 OSS 参数解析失败:", error);
@@ -67,6 +68,23 @@ export class AliOssMapper {
         "AliOssParsingError",
         "The x-oss-process parameter could not be parsed. Please check the syntax."
       );
+    }
+  }
+
+  /**
+   * 模拟阿里云 OSS 请求应用默认优化：
+   * - JPEG 默认 quality 95（如果用户未显式指定 quality）
+   * - 有 resize 操作时自动加轻微锐化
+   */
+  private applyDefaults(edits: ImageEdits): void {
+    // 如果用户没有显式设置 quality，默认 JPEG quality 95
+    if (!edits.jpeg) {
+      edits.jpeg = { quality: 95 };
+    }
+
+    // 有 resize 操作时自动加锐化
+    if (edits.resize && !edits.sharpen) {
+      edits.sharpen = true;
     }
   }
 
