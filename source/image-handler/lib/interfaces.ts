@@ -17,7 +17,6 @@ export interface QueryStringParameters {
   flip?: string;
   flop?: string;
   grayscale?: string;
-  "x-oss-process"?: string;
 }
 
 export interface ImageHandlerEvent {

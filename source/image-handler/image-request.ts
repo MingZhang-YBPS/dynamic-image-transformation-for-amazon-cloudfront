@@ -19,7 +19,6 @@ import {
 } from "./lib";
 import { SecretProvider } from "./secret-provider";
 import { ThumborMapper } from "./thumbor-mapper";
-import { AliOssMapper } from "./alioss-mapper";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import utc from "dayjs/plugin/utc";
@@ -68,18 +67,18 @@ export class ImageRequest {
    * @param imageRequestInfo Initialized image request information
    */
   private fixQuality(imageRequestInfo: ImageRequestInfo): void {
-    const requestType = [RequestTypes.CUSTOM, RequestTypes.THUMBOR, RequestTypes.ALIOSS];
-    const acceptedValues = [
-      ImageFormatTypes.JPEG,
-      ImageFormatTypes.PNG,
-      ImageFormatTypes.WEBP,
-      ImageFormatTypes.TIFF,
-      ImageFormatTypes.HEIF,
-      ImageFormatTypes.GIF,
-      ImageFormatTypes.AVIF,
-    ];
-
     if (imageRequestInfo.outputFormat) {
+      const requestType = [RequestTypes.CUSTOM, RequestTypes.THUMBOR];
+      const acceptedValues = [
+        ImageFormatTypes.JPEG,
+        ImageFormatTypes.PNG,
+        ImageFormatTypes.WEBP,
+        ImageFormatTypes.TIFF,
+        ImageFormatTypes.HEIF,
+        ImageFormatTypes.GIF,
+        ImageFormatTypes.AVIF,
+      ];
+
       imageRequestInfo.contentType = `image/${imageRequestInfo.outputFormat}`;
       if (
         requestType.includes(imageRequestInfo.requestType) &&
@@ -91,28 +90,6 @@ export class ImageRequest {
 
         if (qualityKey && qualityKey !== imageRequestInfo.outputFormat) {
           imageRequestInfo.edits[imageRequestInfo.outputFormat] = imageRequestInfo.edits[qualityKey];
-          delete imageRequestInfo.edits[qualityKey];
-        }
-      }
-    } else if (requestType.includes(imageRequestInfo.requestType)) {
-      // No outputFormat: map quality key to match the original image's content type
-      const qualityKey = Object.keys(imageRequestInfo.edits).filter((key) =>
-        acceptedValues.includes(key as ImageFormatTypes)
-      )[0];
-
-      if (qualityKey) {
-        const contentTypeToFormat: Record<string, string> = {
-          "image/jpeg": ImageFormatTypes.JPEG,
-          "image/webp": ImageFormatTypes.WEBP,
-          "image/avif": ImageFormatTypes.AVIF,
-          "image/tiff": ImageFormatTypes.TIFF,
-        };
-        const targetFormat = contentTypeToFormat[imageRequestInfo.contentType];
-        if (targetFormat && targetFormat !== qualityKey) {
-          imageRequestInfo.edits[targetFormat] = imageRequestInfo.edits[qualityKey];
-          delete imageRequestInfo.edits[qualityKey];
-        } else if (!targetFormat) {
-          // PNG, GIF, SVG etc. don't support quality - remove it
           delete imageRequestInfo.edits[qualityKey];
         }
       }
@@ -262,7 +239,7 @@ export class ImageRequest {
         const sourceBuckets = getAllowedSourceBuckets();
         return sourceBuckets[0];
       }
-    } else if (requestType === RequestTypes.THUMBOR || requestType === RequestTypes.CUSTOM || requestType === RequestTypes.ALIOSS) {
+    } else if (requestType === RequestTypes.THUMBOR || requestType === RequestTypes.CUSTOM) {
       // Use the default image source bucket env var
       const sourceBuckets = getAllowedSourceBuckets();
       // Take the path and split it at "/" to get each "word" in the url as array
@@ -304,10 +281,6 @@ export class ImageRequest {
       const thumborMapping = new ThumborMapper();
       const parsedPath = thumborMapping.parseCustomPath(event.path);
       return thumborMapping.mapPathToEdits(parsedPath);
-    } else if (requestType === RequestTypes.ALIOSS) {
-      const aliOssMapper = new AliOssMapper();
-      const processValue = event.queryStringParameters?.["x-oss-process"] || "";
-      return aliOssMapper.mapProcessToEdits(processValue);
     } else {
       throw new ImageHandlerError(
         StatusCodes.BAD_REQUEST,
@@ -347,11 +320,6 @@ export class ImageRequest {
       // Decode the image request and return the image key
       const { key } = this.decodeRequest(event);
       return key;
-    }
-
-    if (requestType === RequestTypes.ALIOSS) {
-      // 阿里云 OSS 格式：URL path 就是图片的 key，去掉开头的斜杠
-      return decodeURIComponent(event.path.replace(/^\/+/, ""));
     }
 
     if (requestType === RequestTypes.THUMBOR || requestType === RequestTypes.CUSTOM) {
@@ -400,11 +368,6 @@ export class ImageRequest {
    * @returns The request type.
    */
   public parseRequestType(event: ImageHandlerEvent): RequestTypes {
-    // 优先检测阿里云 OSS 图片处理请求
-    if (AliOssMapper.isAliOssRequest(event.queryStringParameters)) {
-      return RequestTypes.ALIOSS;
-    }
-
     const { path } = event;
     const matchDefault = /^(\/?)([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
     const matchThumbor1 = /^(\/?)((fit-in)?|(filters:.+\(.?\))?|(unsafe)?)/i;
